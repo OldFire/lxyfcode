@@ -1,0 +1,29 @@
+target = $(wildcard *.cpp) #目录下所有.c文件编译
+#target=hello.c hello01.c 部分文件编译
+obj = $(patsubst %.cpp, %, $(target))#获取源文件.c的名字
+
+
+target1 = $(wildcard *.c) #目录下所有.c文件编译
+#target=hello.c hello01.c 部分文件编译
+obj1 = $(patsubst %.c, %, $(target1))#获取源文件.c的名字
+
+lib_path = /usr/lib64/mysql/
+inc_path = /usr/include/mysql/
+oth_lib = -lstdc++ -ldl -lpthread -lrt -lm
+
+ALL:$(obj)
+
+$(obj):%:%.cpp
+	g++ $< -o $@ -L$(lib_path) -lmysqlclient -I$(inc_path) $(oth_lib)
+
+
+ALL:$(obj1)
+
+$(obj1):%:%.c
+	gcc $< -o $@ -L$(lib_path) -lmysqlclient -I$(inc_path) $(oth_lib)
+
+
+.PHONY:ALL clean
+clean:
+	-rm $(obj) $(obj1) *.o -rf
+
