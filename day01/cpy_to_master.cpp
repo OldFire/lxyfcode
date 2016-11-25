@@ -14,14 +14,15 @@
 int main()
 {
 	char buf[512];
-	FILE*fp=popen("find ./ -type f | grep .cpp$","r");
+	char commond[512]="find ./ -type f | grep 'sh$|cpp$|sql$'";
+	FILE*fp=popen(commond,"r");
 	while(fgets(buf,sizeof(buf),fp))
 	{
 		buf[strlen(buf)-1]=0;
 		pid_t pid=fork();
 		if(buf!=NULL&&pid==0)
 		{
-			execlp("cp","cp",buf,"/home/itcast/Mycode/",NULL);
+			execlp("cp","cp",buf,"/home/itcast/lxyfcode/",NULL);
 			memset(buf,0,sizeof(buf));
 			return 0;
 		}
