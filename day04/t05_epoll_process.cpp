@@ -29,7 +29,7 @@ int main()
 
 	listen(fd,20);
 
-	int process_count=20;
+	int process_count=3;
 	int isParent=1;
 	for(int i=0;i<process_count;++i)
 	{
@@ -69,7 +69,12 @@ int main()
 				{
 					char buf[1024];
 					int ret=recv(p->data.fd,buf,sizeof(buf),0);
-					if(ret>0)  printf("%s\n",buf);
+					if(ret>0)
+					{
+						printf("%s\n",buf);
+						send(p->data.fd,buf,sizeof(buf),0);
+						memset(buf,sizeof(buf),0);
+					}
 					else
 					{
 						close(p->data.fd);

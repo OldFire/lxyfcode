@@ -61,42 +61,36 @@ int main()
 						int newfd=accept(fd,NULL,NULL);
 						if(newfd<0)
 						{
-							if(errno==EAGAIN)
+							if(errno==EAGAIN||errno==EINTR)
 								break;
 							else
 								exit(1);
 						}
+						printf("has new client...\n");
+						send(newfd,"hello client...\n",20,0);
 						ev.data.fd=newfd;
 						set_non_block(newfd);
-						ev.events=EPOLLIN|EPOLLET;
+						ev.events=EPOLLIN|EPOLLET|EPOLLOUT;
 						epoll_ctl(epollfd,EPOLL_CTL_ADD,newfd,&ev);
 					}
 				}
 				else
 				{
-					printf("socket has data,but not recv\n");
 					char buf[1024];
 					while(1)
 					{
 						int ret=read(p->data.fd,buf,sizeof(buf));
 						if(ret>0)
 						{
-							printf("%s\n",buf);
+							printf("Servrecv:%s\n",buf);
+							send(p->data.fd,buf,sizeof(buf),0);
 						}
-						else if(ret<0)
+						else if(ret<=0)
 						{
-							if(errno==EAGAIN)
-							{
-								break;
-							}
-							else
-							{
-								close(p->data.fd);
-							}
-						}
-						else
-						{
+							if(errno==EAGAIN||EINTR) break;
+							epoll_ctl(epollfd,EPOLL_CTL_DEL,p->data.fd,&ev);
 							close(p->data.fd);
+							break;
 						}
 					}
 				}

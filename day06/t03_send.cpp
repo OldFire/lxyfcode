@@ -9,18 +9,31 @@
  *        Company:  
  * ************************************************************************/
 
-#include "h.h"
+#include "../h.h"
 
-int main()
+int main(int argc,char*argv[])
 {
 	int fd=socket(AF_INET,SOCK_STREAM,0);
+	if(argc!=3)
+	{
+		printf("usage [%s] [addr] [port]...\n",argv[0]);
+		return -1;
+	}
+	int port=atoi(argv[2]);
+	char *address=argv[1];
 
 	struct sockaddr_in addr;
 	addr.sin_family=AF_INET;
-	addr.sin_port=htons(6666);
-	addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+	addr.sin_port=htons(port);
+	addr.sin_addr.s_addr=inet_addr(address);
 
-	connect(fd,(struct sockaddr*)&addr,sizeof(addr));
+	int ret=connect(fd,(struct sockaddr*)&addr,sizeof(addr));
+	
+	if(ret<0)
+	{
+		printf("server is no ACK...\n");
+		return -1;
+	}
 
 	fd_set set;
 	while(1)
@@ -43,7 +56,7 @@ int main()
 			char buf[1024]={0};
 			int ret=recv(fd,buf,sizeof(buf),0);
 			if(ret==0) break;
-			printf("recv:%s",buf);
+			printf("Clientrecv:%s\n",buf);
 		}
 	}
 	return 0;

@@ -8,7 +8,6 @@
  *         Author:  YOUR NAME (), 
  *        Company:  
  * ************************************************************************/
-
 #include "../h.h"
 #include <string>
 #include <algorithm>
@@ -41,12 +40,13 @@ int main(int argc,char*argv[])
 	
 	strcpy(buf,(keyword+"|"+keyword2).c_str());
 	
-	//printf("%s\n%s\n",keyword.c_str(),keyword2.c_str());
-	//printf("buf=%s\n",buf);
+	printf("%s\n%s\n",keyword.c_str(),keyword2.c_str());
+	printf("buf=%s\n",buf);
 	
 	
-	//string command="grep -E \""+string(buf)+"\" "+path+"|awk -F '\\t' '{print $3}'";  //全行匹配
-	string command="cat "+ path+"|awk -F '\\t' '{print $3}'"+"|grep -E \""+string(buf)+"\" "; //在指定列匹配
+	string command="grep -E \""+string(buf)+"\" "+path+"|awk -F '\\t' '{print $3}'";  //全行匹配,返回单列
+	//string command="grep -E \""+string(buf)+"\" "+path;//全文匹配返回整行;
+    //string command="cat "+ path+"|awk -F '\\t' '{print $3}'"+"|grep -E \""+string(buf)+"\" "; //在指定列匹配
 	//printf("command=%s\n",command.c_str());
 	
 	FILE *fp=popen(command.c_str(),"r");

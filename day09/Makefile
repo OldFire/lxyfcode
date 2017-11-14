@@ -1,9 +1,8 @@
-
 target := a.out
 all: $(target)
 
 CC := g++
-LIBPATH := -L/home/ruan/Downloads/OpenCV-2.4.3/build/lib
+LIBPATH := -L/home/ruan/Downloads/OpenCV-2.4.3/build/lib/
 
 LIBVAR:=-lopencv_contrib \
 	-lopencv_core \
@@ -22,18 +21,20 @@ LIBVAR:=-lopencv_contrib \
 	-lopencv_video \
 	-lopencv_videostab
 
+INC  = -I/home/ruan/Downloads/OpenCV-2.4.3/build/include/
 
-INC  += -I/home/ruan/Downloads/OpenCV-2.4.3/build/include/
-
-CPPFLAGS += -std=c++11 -g
+CPPFLAGS += -std=c++11 -g 
 
 src := $(shell find -name "*.cpp")
 # .d文件
-dep := $(src:.cpp=.d)
+#dep := $(src:.cpp=.d)
 
--include $(dep)
-%.d: %.cpp
-	$(CC) -MM $< > $@
+#-include $(dep)
+#%.d: %.cpp
+#	$(CC) -MM $< > $@
+
+%.o: %.cpp
+	$(CC) $(CPPFLAGS) $(INC) -o $@ -c $< 
 
 obj += $(src:.cpp=.o)
 
