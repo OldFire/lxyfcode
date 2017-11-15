@@ -1,17 +1,9 @@
-/* ************************************************************************
- *       Filename:  sql.cpp
- *    Description:  
- *        Version:  1.0
- *        Created:  11/17/2016 04:49:10 PM
- *       Revision:  none
- *       Compiler:  gcc
- *         Author:  YOUR NAME (), 
- *        Company:  
- * ************************************************************************/
-#include<mysql.h>
+#include</usr/include/mysql/mysql.h>
 #include<stdlib.h>
 #include<stdio.h>
-
+#include<string>
+#include<iostream>
+using namespace std;
 int main()
 {
 	MYSQL*mysql = NULL;
@@ -26,17 +18,24 @@ int main()
 
 	printf("init ok......\n");
 
-	mysql = mysql_real_connect(mysql, "127.0.0.1", "root", "123456", "mydb61", 0, NULL, 0);
+	mysql = mysql_real_connect(mysql, "127.0.0.1", "root", "123456", "answer", 0, NULL, 0);
 	if (mysql == NULL)
 	{
 		printf("mysql_real_connect error %d\n", mysql_errno(mysql));
 		exit(1);
 	}
 
+	if(mysql_set_character_set(mysql,"utf8"))
+	{
+		printf("错误，%s\n",mysql_error(mysql));
+		exit(1);
+	}
+
 	printf("mysql_real_connect ok......\n");
 
-	const char*query = "select * from emp";
-	ret = mysql_query(mysql, query);
+	string query="call getsingleSubject('历史');";
+
+	ret = mysql_query(mysql, query.c_str());
 	if (ret != 0)
 	{
 		printf("mysql_query error:%d\n", mysql_errno(mysql));
@@ -83,4 +82,3 @@ int main()
 
 	return 0;
 }
-
