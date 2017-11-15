@@ -11,6 +11,14 @@
 
 #include "../h.h"
 
+#define PROCESS_COUNT 5 //所要创建的进程数
+#define create_daemon(){ \
+	if(fork()==0) setsid(); \
+	else exit(0); \
+	if(fork()!=0) exit(0); \
+	}
+
+
 void set_non_block(int fd)
 {
 	uint32_t flags;
@@ -21,6 +29,15 @@ void set_non_block(int fd)
 
 int main()
 {
+	create_daemon();
+
+	signal(SIGCHLD,SIG_IGN);
+	signal(SIGINT,SIG_IGN);
+	signal(SIGHUP,SIG_IGN);
+	signal(SIGPIPE,SIG_IGN);
+	signal(SIGTTOU,SIG_IGN);
+	//signal(SIGTSTP,SIG_IGN);  //ctrl + Z退出
+	
 	int fd=socket(AF_INET,SOCK_STREAM,0);
 
 	struct sockaddr_in addr;
@@ -37,6 +54,19 @@ int main()
 	listen(fd,20);
 
 	set_non_block(fd);
+
+	//创建多进程任务
+	int isParent=1;
+	for(int i=0;i<PROCESS_COUNT;++i)
+	{
+		pid_t pid=fork();
+		if(pid==0)
+		{
+			isParent=0;
+			break;
+		}
+	}
+
 	int epollfd=epoll_create(512);
 
 	struct epoll_event ev;
@@ -83,7 +113,8 @@ int main()
 						if(ret>0)
 						{
 							printf("Servrecv:%s\n",buf);
-							send(p->data.fd,buf,sizeof(buf),0);
+							send(p->data.fd,buf,ret,0);
+							bzero(buf,sizeof(buf));
 						}
 						else if(ret<=0)
 						{
@@ -97,6 +128,15 @@ int main()
 			}
 		}
 	}
+
+	if(isParent)
+	{
+		for(int i=0;i<PROCESS_COUNT;i++)
+		{
+			waitpid(-1,NULL,WNOHANG);
+		}
+	}
+	close(epollfd);
 
 }
 
