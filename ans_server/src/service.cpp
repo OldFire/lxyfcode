@@ -9,7 +9,8 @@
  *        Company:  
  * ************************************************************************/
 
-#include "../h.h"
+#include "h.h"
+#include "mysql.hpp"
 
 #define PROCESS_COUNT 5 //所要创建的进程数
 #define create_daemon(){ \
@@ -25,6 +26,36 @@ void set_non_block(int fd)
 	flags=fcntl(fd,F_GETFL);
 	flags|=O_NONBLOCK;
 	fcntl(fd,F_SETFL,flags);
+}
+
+char * delMessage(char*msg)
+{
+	void *mysql=connectTomysqldb();//连接到数据库
+	char *myReq=NULL;
+
+	if(strncmp(msg,"0101",4)==0)//单人文学
+	{
+		myReq=(char*)getsingleSubject(mysql,"文学");
+	}
+	else if(strncmp(msg,"0102",4)==0)//单人历史
+	{
+		myReq=(char*)getsingleSubject(mysql,"历史");
+	}
+	else if(strncmp(msg,"0201",4)==0)//双人文学
+	{
+		myReq=(char*)getdoubleSubject(mysql,"文学");
+	}
+	else if(strncmp(msg,"0202",4)==0)//双人历史
+	{
+		myReq=(char*)getdoubleSubject(mysql,"历史");
+	}
+	else
+	{
+		printf("未找到此类别，请重新选择!\n");
+		myReq=(char*)"未找到此类别，请重新选择!";
+	}
+	disConnectmysqldb(mysql);
+	return myReq;
 }
 
 int main()
@@ -114,7 +145,10 @@ int main()
 						if(ret>0)
 						{
 							printf("Servrecv:%s\n",buf);
-							send(p->data.fd,buf,ret,0);
+							
+							char*Res=delMessage(buf);
+
+							send(p->data.fd,Res,strlen(Res),0);
 							bzero(buf,sizeof(buf));
 						}
 						else if(ret<=0)
