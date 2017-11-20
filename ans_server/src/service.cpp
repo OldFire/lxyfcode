@@ -12,19 +12,30 @@
 #include "h.h"
 #include "mysql.hpp"
 #include <map>
+#include <set>
 #include <string>
 using namespace std;
 
-map<int,int>matchMap;
+static map<int,int>matchMap;
+static set<int>allUser;
+sem_t sem;
 
 int senderfd,matcherfd;
+pthread_mutex_t mutex;
 
-#define PROCESS_COUNT 5 //所要创建的进程数
+struct msg_fd{    //用于给线程函数传参
+	char msg[8];
+	int fd;
+}; 
+
+#define PROCESS_COUNT 0 //所要创建的进程数
+
 #define create_daemon(){ \
 	if(fork()==0) setsid(); \
 	else exit(0); \
 	if(fork()!=0) exit(0); \
 }
+
 
 
 void set_non_block(int fd)
@@ -36,14 +47,17 @@ void set_non_block(int fd)
 }
 
 
+
 bool startdoubleMatch(int fd,int*senderfd,int*matcherfd)
 {
-	send(fd,"is matching...\n",sizeof("is matching...\n"),0);
-	
-	int num=matchMap.size();
-	matchMap[num+1]=fd;
+	send(fd,"is matching 15s...\n",sizeof("is matching 15s...\n"),0);
 
-	printf("num before=%d\n",num);
+	int num=matchMap.size();
+	pthread_mutex_lock(&mutex);
+	matchMap[num+1]=fd;
+	pthread_mutex_unlock(&mutex);
+
+	printf("num=%d\n",num);
 	if(num>0&&(num%2==1))
 	{
 		*senderfd=matchMap[num];
@@ -53,23 +67,26 @@ bool startdoubleMatch(int fd,int*senderfd,int*matcherfd)
 	}
 	else
 	{
-		sleep(30);
+		sleep(15);
 		if(matchMap.size()<=num+1)
 		{
-			printf("num behind=%d\n",num);
 			map<int,int>::iterator iter;
 			iter=matchMap.find(num+1);
+			pthread_mutex_lock(&mutex);
 			matchMap.erase(iter);
+			pthread_mutex_unlock(&mutex);
 			send(fd,"match failed...\n",sizeof("match failed...\n"),0);
 			return false;
 		}
+		return true;
 	}
+
 }
 
 char * delMessage(char*msg,int fd)
 {
 	int matchResult=0;
-	
+
 	void *mysql=connectTomysqldb();//连接到数据库
 	char *myReq=NULL;
 
@@ -85,7 +102,10 @@ char * delMessage(char*msg,int fd)
 	{
 		if(startdoubleMatch(fd,&senderfd,&matcherfd))
 		{
-			myReq=(char*)getdoubleSubject(mysql,"文学");
+			if(matchResult==0)
+			{
+				myReq=(char*)getdoubleSubject(mysql,"文学");
+			}
 			matchResult=1;
 		}
 		else
@@ -99,7 +119,10 @@ char * delMessage(char*msg,int fd)
 	{
 		if(startdoubleMatch(fd,&senderfd,&matcherfd))
 		{
-			myReq=(char*)getdoubleSubject(mysql,"历史");
+			if(matchResult==0)
+			{
+				myReq=(char*)getdoubleSubject(mysql,"历史");
+			}
 			matchResult=1;
 		}
 		else
@@ -114,7 +137,7 @@ char * delMessage(char*msg,int fd)
 		myReq=(char*)"未找到此类别，请重新选择!";
 	}
 	disConnectmysqldb(mysql);
-	
+
 	if(strncmp(msg,"01",2)==0)
 	{
 		send(fd,myReq,strlen(myReq),0);
@@ -136,6 +159,29 @@ char * delMessage(char*msg,int fd)
 
 	return myReq;
 }
+
+
+
+void* workThread(void *ptr)
+{
+	while(1)
+	{
+		int ret=sem_wait(&sem);
+		if(ret<0)
+		{
+			if(errno==EINTR)
+				continue;
+			exit(1);
+		}
+	
+	msg_fd *tmp=(msg_fd*)ptr;
+	printf("tmp->msg=%s,tmp->fd=%d\n",tmp->msg,tmp->fd);
+
+	char *out=delMessage(tmp->msg,tmp->fd);
+	printf("%s\n",out);
+	}
+}
+
 
 int main()
 {
@@ -166,23 +212,14 @@ int main()
 
 	set_non_block(fd);
 
-	//创建多进程任务
-	int isParent=1;
-	for(int i=0;i<PROCESS_COUNT;++i)
-	{
-		pid_t pid=fork();
-		if(pid==0)
-		{
-			isParent=0;
-			break;
-		}
-	}
 
 	int epollfd=epoll_create(512);
 
 	struct epoll_event ev;
 	ev.data.fd=fd;
 	ev.events=EPOLLIN;
+	
+	msg_fd *p1=new msg_fd;
 
 	epoll_ctl(epollfd,EPOLL_CTL_ADD,fd,&ev);
 
@@ -209,6 +246,7 @@ int main()
 						}
 						printf("has new client...\n");
 						send(newfd,"hello client...\n",20,0);
+						allUser.insert(newfd);
 						ev.data.fd=newfd;
 						set_non_block(newfd);
 						ev.events=EPOLLIN|EPOLLET|EPOLLOUT;
@@ -224,8 +262,18 @@ int main()
 						if(ret>0)
 						{
 							printf("Servrecv:%s\n",buf);
-							char *out=delMessage(buf,p->data.fd); //处理收到的消息
-							printf("%s\n",out);
+
+							bzero(p1,sizeof(msg_fd));		
+							strncpy(p1->msg,buf,4);
+							p1->fd=p->data.fd;
+
+							pthread_t tid;
+							if(*(allUser.find(p->data.fd)))
+							{
+								pthread_create(&tid,NULL,workThread,p1);	 //创建新线程处理收到的消息
+								pthread_detach(tid);
+							}
+							sem_post(&sem);
 							bzero(buf,sizeof(buf));
 						}
 						else if(ret<=0)
@@ -241,15 +289,7 @@ int main()
 		}
 	}
 
-	if(isParent)
-	{
-		for(int i=0;i<PROCESS_COUNT;i++)
-		{
-			waitpid(-1,NULL,WNOHANG);
-		}
-	}
 	close(epollfd);
-
 }
 
 
