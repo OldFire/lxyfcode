@@ -114,7 +114,7 @@ void* getsingleSubject(void *sql,const char*str)
 
 	if(out)
 	{
-		printf("%s\n",out);
+	//	printf("%s\n",out);  //打印结果
 		return out;
 	}
 
@@ -193,7 +193,7 @@ void* getdoubleSubject(void *sql,const char*str)
 
 	if(out)
 	{
-		printf("%s\n",out);
+	//	printf("%s\n",out);  //打印结果
 		return out;
 	}
 

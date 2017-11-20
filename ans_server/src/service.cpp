@@ -11,13 +11,20 @@
 
 #include "h.h"
 #include "mysql.hpp"
+#include <map>
+#include <string>
+using namespace std;
+
+map<int,int>matchMap;
+
+int senderfd,matcherfd;
 
 #define PROCESS_COUNT 5 //所要创建的进程数
 #define create_daemon(){ \
 	if(fork()==0) setsid(); \
 	else exit(0); \
 	if(fork()!=0) exit(0); \
-	}
+}
 
 
 void set_non_block(int fd)
@@ -28,8 +35,41 @@ void set_non_block(int fd)
 	fcntl(fd,F_SETFL,flags);
 }
 
-char * delMessage(char*msg)
+
+bool startdoubleMatch(int fd,int*senderfd,int*matcherfd)
 {
+	send(fd,"is matching...\n",sizeof("is matching...\n"),0);
+	
+	int num=matchMap.size();
+	matchMap[num+1]=fd;
+
+	printf("num before=%d\n",num);
+	if(num>0&&(num%2==1))
+	{
+		*senderfd=matchMap[num];
+		*matcherfd=matchMap[num+1];
+		send(fd,"match sucess...\n",sizeof("match sucess...\n"),0);
+		return true;
+	}
+	else
+	{
+		sleep(30);
+		if(matchMap.size()<=num+1)
+		{
+			printf("num behind=%d\n",num);
+			map<int,int>::iterator iter;
+			iter=matchMap.find(num+1);
+			matchMap.erase(iter);
+			send(fd,"match failed...\n",sizeof("match failed...\n"),0);
+			return false;
+		}
+	}
+}
+
+char * delMessage(char*msg,int fd)
+{
+	int matchResult=0;
+	
 	void *mysql=connectTomysqldb();//连接到数据库
 	char *myReq=NULL;
 
@@ -43,11 +83,30 @@ char * delMessage(char*msg)
 	}
 	else if(strncmp(msg,"0201",4)==0)//双人文学
 	{
-		myReq=(char*)getdoubleSubject(mysql,"文学");
+		if(startdoubleMatch(fd,&senderfd,&matcherfd))
+		{
+			myReq=(char*)getdoubleSubject(mysql,"文学");
+			matchResult=1;
+		}
+		else
+		{
+			myReq=(char*)"match failed...\n";
+			matchResult=0;
+		}
+
 	}
 	else if(strncmp(msg,"0202",4)==0)//双人历史
 	{
-		myReq=(char*)getdoubleSubject(mysql,"历史");
+		if(startdoubleMatch(fd,&senderfd,&matcherfd))
+		{
+			myReq=(char*)getdoubleSubject(mysql,"历史");
+			matchResult=1;
+		}
+		else
+		{
+			myReq=(char*)"match failed...\n";
+			matchResult=0;
+		}
 	}
 	else
 	{
@@ -55,6 +114,26 @@ char * delMessage(char*msg)
 		myReq=(char*)"未找到此类别，请重新选择!";
 	}
 	disConnectmysqldb(mysql);
+	
+	if(strncmp(msg,"01",2)==0)
+	{
+		send(fd,myReq,strlen(myReq),0);
+	}
+	else if(strncmp(msg,"02",2)==0)
+	{
+		if(matchResult)
+		{
+			printf("sucess\n");
+			send(senderfd,myReq,strlen(myReq),0);
+			send(matcherfd,myReq,strlen(myReq),0);
+		}
+		else
+		{
+			printf("failed\n");
+			send(fd,myReq,strlen(myReq),0);
+		}
+	}
+
 	return myReq;
 }
 
@@ -69,7 +148,7 @@ int main()
 	signal(SIGTTOU,SIG_IGN);
 	signal(SIGQUIT,SIG_IGN);
 	signal(SIGTSTP,SIG_IGN);  //ctrl + Z退出
-	
+
 	int fd=socket(AF_INET,SOCK_STREAM,0);
 
 	struct sockaddr_in addr;
@@ -145,10 +224,8 @@ int main()
 						if(ret>0)
 						{
 							printf("Servrecv:%s\n",buf);
-							
-							char*Res=delMessage(buf);
-
-							send(p->data.fd,Res,strlen(Res),0);
+							char *out=delMessage(buf,p->data.fd); //处理收到的消息
+							printf("%s\n",out);
 							bzero(buf,sizeof(buf));
 						}
 						else if(ret<=0)
