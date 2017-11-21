@@ -18,10 +18,12 @@ using namespace std;
 
 static map<int,int>matchMap;
 static set<int>allUser;
+static int matchResult=0;
 sem_t sem;
 
 int senderfd,matcherfd;
 pthread_mutex_t mutex;
+static char*resBuf=NULL;
 
 struct msg_fd{    //用于给线程函数传参
 	char msg[8];
@@ -67,7 +69,19 @@ bool startdoubleMatch(int fd,int*senderfd,int*matcherfd)
 	}
 	else
 	{
-		sleep(15);
+		int timeout=15;
+		while(--timeout)
+		{
+			if(matchMap.size()>num+1) 
+			{
+				*senderfd=matchMap[num+1];
+				*matcherfd=matchMap[num+2];
+				send(fd,"match sucess...\n",sizeof("match sucess...\n"),0);
+				return true;
+			}
+			sleep(1);
+		}	
+
 		if(matchMap.size()<=num+1)
 		{
 			map<int,int>::iterator iter;
@@ -78,14 +92,11 @@ bool startdoubleMatch(int fd,int*senderfd,int*matcherfd)
 			send(fd,"match failed...\n",sizeof("match failed...\n"),0);
 			return false;
 		}
-		return true;
 	}
-
 }
 
 char * delMessage(char*msg,int fd)
 {
-	int matchResult=0;
 
 	void *mysql=connectTomysqldb();//连接到数据库
 	char *myReq=NULL;
@@ -100,13 +111,16 @@ char * delMessage(char*msg,int fd)
 	}
 	else if(strncmp(msg,"0201",4)==0)//双人文学
 	{
+		if(matchResult==0)
+		{
+			printf(" i is called,matchResult=%d\n",matchResult);
+			resBuf=(char*)getdoubleSubject(mysql,"文学");
+		}
+
 		if(startdoubleMatch(fd,&senderfd,&matcherfd))
 		{
-			if(matchResult==0)
-			{
-				myReq=(char*)getdoubleSubject(mysql,"文学");
-			}
-			matchResult=1;
+			myReq=resBuf;
+			matchResult+=1;
 		}
 		else
 		{
@@ -117,45 +131,33 @@ char * delMessage(char*msg,int fd)
 	}
 	else if(strncmp(msg,"0202",4)==0)//双人历史
 	{
+		if(matchResult==0)
+		{
+			printf(" i is called,matchResult=%d\n",matchResult);
+			resBuf=(char*)getdoubleSubject(mysql,"历史");
+		}
+
 		if(startdoubleMatch(fd,&senderfd,&matcherfd))
 		{
-			if(matchResult==0)
-			{
-				myReq=(char*)getdoubleSubject(mysql,"历史");
-			}
-			matchResult=1;
+			myReq=resBuf;
+			matchResult+=1;
 		}
 		else
 		{
 			myReq=(char*)"match failed...\n";
 			matchResult=0;
 		}
+
 	}
 	else
-	{
+	{	
 		printf("未找到此类别，请重新选择!\n");
 		myReq=(char*)"未找到此类别，请重新选择!";
 	}
-	disConnectmysqldb(mysql);
 
-	if(strncmp(msg,"01",2)==0)
-	{
-		send(fd,myReq,strlen(myReq),0);
-	}
-	else if(strncmp(msg,"02",2)==0)
-	{
-		if(matchResult)
-		{
-			printf("sucess\n");
-			send(senderfd,myReq,strlen(myReq),0);
-			send(matcherfd,myReq,strlen(myReq),0);
-		}
-		else
-		{
-			printf("failed\n");
-			send(fd,myReq,strlen(myReq),0);
-		}
-	}
+	disConnectmysqldb(mysql);
+	send(fd,myReq,strlen(myReq),0);
+	printf("%s\n",myReq);
 
 	return myReq;
 }
@@ -173,12 +175,11 @@ void* workThread(void *ptr)
 				continue;
 			exit(1);
 		}
-	
-	msg_fd *tmp=(msg_fd*)ptr;
-	printf("tmp->msg=%s,tmp->fd=%d\n",tmp->msg,tmp->fd);
 
-	char *out=delMessage(tmp->msg,tmp->fd);
-	printf("%s\n",out);
+		msg_fd *tmp=(msg_fd*)ptr;
+		printf("tmp->msg=%s,tmp->fd=%d\n",tmp->msg,tmp->fd);
+
+		delMessage(tmp->msg,tmp->fd);
 	}
 }
 
@@ -194,6 +195,9 @@ int main()
 	signal(SIGTTOU,SIG_IGN);
 	signal(SIGQUIT,SIG_IGN);
 	signal(SIGTSTP,SIG_IGN);  //ctrl + Z退出
+
+	pthread_mutex_init(&mutex,NULL);
+	sem_init(&sem,0,0);
 
 	int fd=socket(AF_INET,SOCK_STREAM,0);
 
@@ -218,8 +222,9 @@ int main()
 	struct epoll_event ev;
 	ev.data.fd=fd;
 	ev.events=EPOLLIN;
-	
+
 	msg_fd *p1=new msg_fd;
+
 
 	epoll_ctl(epollfd,EPOLL_CTL_ADD,fd,&ev);
 
@@ -246,7 +251,6 @@ int main()
 						}
 						printf("has new client...\n");
 						send(newfd,"hello client...\n",20,0);
-						allUser.insert(newfd);
 						ev.data.fd=newfd;
 						set_non_block(newfd);
 						ev.events=EPOLLIN|EPOLLET|EPOLLOUT;
@@ -266,13 +270,15 @@ int main()
 							bzero(p1,sizeof(msg_fd));		
 							strncpy(p1->msg,buf,4);
 							p1->fd=p->data.fd;
-
 							pthread_t tid;
-							if(*(allUser.find(p->data.fd)))
+
+							if(allUser.find(p->data.fd)==allUser.end())
 							{
 								pthread_create(&tid,NULL,workThread,p1);	 //创建新线程处理收到的消息
 								pthread_detach(tid);
+								allUser.insert(p->data.fd);
 							}
+
 							sem_post(&sem);
 							bzero(buf,sizeof(buf));
 						}
