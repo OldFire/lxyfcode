@@ -100,9 +100,9 @@ void startdoubleMatch(int fd,int*sender,int*matcher,char*resBuf)
 	int isExist=0;
 
 	//通过循环判断匹配池中是否存在此fd
-	if(map<int,int>::iterator iter=matchMap.begin();iter!=map.end();iter++)
+	for(map<int,int>::iterator iter=matchMap.begin();iter!=matchMap.end();iter++)
 	{
-		if(iter->sencond==fd) isExist=1;
+		if(iter->second==fd) isExist=1;
 		break;
 	}
                        	
