@@ -96,7 +96,17 @@ void startdoubleMatch(int fd,int*sender,int*matcher,char*resBuf)
 	mySend(fd,"is matching 15s...\n",strlen("is matching 15s...\n"));
 
 	int num=matchMap.size();
-	matchMap[num+1]=fd;
+	
+	int isExist=0;
+
+	//通过循环判断匹配池中是否存在此fd
+	if(map<int,int>::iterator iter=matchMap.begin();iter!=map.end();iter++)
+	{
+		if(iter->sencond==fd) isExist=1;
+		break;
+	}
+                       	
+	if(isExist==0)	matchMap[num+1]=fd;
 
 	printf("num=%d\n",num);
 	if(num>0&&(num%2==1))
