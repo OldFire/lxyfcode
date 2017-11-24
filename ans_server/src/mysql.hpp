@@ -16,7 +16,7 @@ void *connectTomysqldb()
 
 	printf("init ok......\n");
 
-	mysql = mysql_real_connect(mysql, "112.74.205.53", "root", "zl123456", "answer", 0, NULL, 0);
+	mysql = mysql_real_connect(mysql, "127.0.0.1", "root", "123456", "answer", 0, NULL, 0);
 	if (mysql == NULL)
 	{
 		printf("mysql_real_connect error %d\n", mysql_errno(mysql));
