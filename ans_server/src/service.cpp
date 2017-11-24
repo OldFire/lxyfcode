@@ -17,12 +17,10 @@
 using namespace std;
 
 static map<int,int>matchMap;
-static set<int>allUser;
 static int matchResult=0;
 sem_t sem;
 
 int senderfd,matcherfd;
-pthread_mutex_t mutex;
 static char*resBuf=NULL;
 
 struct msg_fd{    //用于给线程函数传参
@@ -38,6 +36,15 @@ struct msg_fd{    //用于给线程函数传参
 	if(fork()!=0) exit(0); \
 }
 
+int mySend(int fd,const char*src,int len)
+{
+	char msgBuf[8192]={0};
+	sprintf(msgBuf,"%04d",len);
+	strncat(msgBuf,src,len);
+	int sendlen=send(fd,msgBuf,len+4,0);
+	printf("sendlen=%d\n%s\n",sendlen,msgBuf);
+	return sendlen;
+}
 
 
 void set_non_block(int fd)
@@ -48,55 +55,69 @@ void set_non_block(int fd)
 	fcntl(fd,F_SETFL,flags);
 }
 
-
-
-bool startdoubleMatch(int fd,int*senderfd,int*matcherfd)
+void *senderThread(void*ptr)
 {
-	send(fd,"is matching 15s...\n",sizeof("is matching 15s...\n"),0);
+	int timeout=20;
+	int num;
+	while(timeout--)
+	{
+		num=matchMap.size();
+		if(num%2==0) 
+		{
+			senderfd=matchMap[num-1];
+			matcherfd=matchMap[num];
+			mySend(senderfd,"match sucess...\n",strlen("match sucess...\n"));
+			mySend(senderfd,resBuf,strlen(resBuf));
+			matchResult=0;
+			return NULL;
+		}
+		sleep(1);
+	}
+
+	mySend(matchMap[num],"match failed...\n",strlen("match failed...\n"));
+	map<int,int>::iterator iter;
+	iter=matchMap.find(num);
+	matchMap.erase(iter);
+}
+
+void waitMatch()
+{
+	pthread_t tid;
+	if(matchMap.size()%2==1)
+	{
+		pthread_create(&tid,NULL,senderThread,NULL);
+		pthread_detach(tid);
+	}
+}
+
+
+void startdoubleMatch(int fd,int*sender,int*matcher,char*resBuf)
+{
+	mySend(fd,"is matching 15s...\n",strlen("is matching 15s...\n"));
 
 	int num=matchMap.size();
-	pthread_mutex_lock(&mutex);
 	matchMap[num+1]=fd;
-	pthread_mutex_unlock(&mutex);
 
 	printf("num=%d\n",num);
 	if(num>0&&(num%2==1))
 	{
-		*senderfd=matchMap[num];
-		*matcherfd=matchMap[num+1];
-		send(fd,"match sucess...\n",sizeof("match sucess...\n"),0);
-		return true;
+		*sender=matchMap[num];
+		*matcher=matchMap[num+1];
+		mySend(fd,"match sucess...\n",strlen("match sucess...\n"));
+		mySend(fd,resBuf,strlen(resBuf));
+		matchResult=0;
 	}
 	else
 	{
-		int timeout=15;
-		while(--timeout)
-		{
-			if(matchMap.size()>num+1) 
-			{
-				*senderfd=matchMap[num+1];
-				*matcherfd=matchMap[num+2];
-				send(fd,"match sucess...\n",sizeof("match sucess...\n"),0);
-				return true;
-			}
-			sleep(1);
-		}	
-
-		if(matchMap.size()<=num+1)
-		{
-			map<int,int>::iterator iter;
-			iter=matchMap.find(num+1);
-			pthread_mutex_lock(&mutex);
-			matchMap.erase(iter);
-			pthread_mutex_unlock(&mutex);
-			send(fd,"match failed...\n",sizeof("match failed...\n"),0);
-			return false;
-		}
+		waitMatch();//匹配的回调函数
 	}
 }
 
-char * delMessage(char*msg,int fd)
+void delMessage(void*ptr)
 {
+	msg_fd *tmp=(msg_fd*)ptr;
+	char*msg=tmp->msg;
+	int fd=tmp->fd;
 
 	void *mysql=connectTomysqldb();//连接到数据库
 	char *myReq=NULL;
@@ -111,23 +132,15 @@ char * delMessage(char*msg,int fd)
 	}
 	else if(strncmp(msg,"0201",4)==0)//双人文学
 	{
+
 		if(matchResult==0)
 		{
 			printf(" i is called,matchResult=%d\n",matchResult);
 			resBuf=(char*)getdoubleSubject(mysql,"文学");
+			matchResult=1;
 		}
-
-		if(startdoubleMatch(fd,&senderfd,&matcherfd))
-		{
-			myReq=resBuf;
-			matchResult+=1;
-		}
-		else
-		{
-			myReq=(char*)"match failed...\n";
-			matchResult=0;
-		}
-
+		myReq=resBuf;
+		startdoubleMatch(fd,&senderfd,&matcherfd,resBuf);
 	}
 	else if(strncmp(msg,"0202",4)==0)//双人历史
 	{
@@ -135,19 +148,10 @@ char * delMessage(char*msg,int fd)
 		{
 			printf(" i is called,matchResult=%d\n",matchResult);
 			resBuf=(char*)getdoubleSubject(mysql,"历史");
+			matchResult=1;
 		}
-
-		if(startdoubleMatch(fd,&senderfd,&matcherfd))
-		{
-			myReq=resBuf;
-			matchResult+=1;
-		}
-		else
-		{
-			myReq=(char*)"match failed...\n";
-			matchResult=0;
-		}
-
+		myReq=resBuf;
+		startdoubleMatch(fd,&senderfd,&matcherfd,resBuf);
 	}
 	else
 	{	
@@ -156,10 +160,10 @@ char * delMessage(char*msg,int fd)
 	}
 
 	disConnectmysqldb(mysql);
-	send(fd,myReq,strlen(myReq),0);
-	printf("%s\n",myReq);
-
-	return myReq;
+	if(strncmp(msg,"01",2)==0)	
+	{
+		mySend(fd,myReq,strlen(myReq));
+	}
 }
 
 
@@ -173,13 +177,12 @@ void* workThread(void *ptr)
 		{
 			if(errno==EINTR)
 				continue;
-			exit(1);
 		}
 
 		msg_fd *tmp=(msg_fd*)ptr;
 		printf("tmp->msg=%s,tmp->fd=%d\n",tmp->msg,tmp->fd);
 
-		delMessage(tmp->msg,tmp->fd);
+		delMessage(ptr);
 	}
 }
 
@@ -196,7 +199,6 @@ int main()
 	signal(SIGQUIT,SIG_IGN);
 	signal(SIGTSTP,SIG_IGN);  //ctrl + Z退出
 
-	pthread_mutex_init(&mutex,NULL);
 	sem_init(&sem,0,0);
 
 	int fd=socket(AF_INET,SOCK_STREAM,0);
@@ -224,6 +226,9 @@ int main()
 	ev.events=EPOLLIN;
 
 	msg_fd *p1=new msg_fd;
+	pthread_t tid;
+	pthread_create(&tid,NULL,workThread,p1);	 //创建新线程处理收到的消息
+	pthread_detach(tid);
 
 
 	epoll_ctl(epollfd,EPOLL_CTL_ADD,fd,&ev);
@@ -250,7 +255,7 @@ int main()
 								exit(1);
 						}
 						printf("has new client...\n");
-						send(newfd,"hello client...\n",20,0);
+						mySend(newfd,"hello...\n",strlen("hello...\n"));
 						ev.data.fd=newfd;
 						set_non_block(newfd);
 						ev.events=EPOLLIN|EPOLLET|EPOLLOUT;
@@ -266,19 +271,9 @@ int main()
 						if(ret>0)
 						{
 							printf("Servrecv:%s\n",buf);
-
 							bzero(p1,sizeof(msg_fd));		
 							strncpy(p1->msg,buf,4);
 							p1->fd=p->data.fd;
-							pthread_t tid;
-
-							if(allUser.find(p->data.fd)==allUser.end())
-							{
-								pthread_create(&tid,NULL,workThread,p1);	 //创建新线程处理收到的消息
-								pthread_detach(tid);
-								allUser.insert(p->data.fd);
-							}
-
 							sem_post(&sem);
 							bzero(buf,sizeof(buf));
 						}

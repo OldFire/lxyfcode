@@ -42,3 +42,4 @@
 #include <sys/file.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <signal.h>
