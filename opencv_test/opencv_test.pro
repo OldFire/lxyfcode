@@ -9,8 +9,8 @@ CONFIG -= app_bundle
 
 TEMPLATE = app
 
-SOURCES += \
-    main.cpp
+SOURCES +=
+
 
 INCLUDEPATH+=C:\opencv\include\opencv\
                     C:\opencv\include\opencv2\
@@ -28,3 +28,7 @@ LIBS+=C:\opencv\lib\libopencv_calib3d243.dll.a\
         C:\opencv\lib\libopencv_ml243.dll.a\
         C:\opencv\lib\libopencv_objdetect243.dll.a\
         C:\opencv\lib\libopencv_video243.dll.a
+
+RESOURCES +=
+
+
