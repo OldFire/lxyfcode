@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QVariant>
+#include <QJsonArray>
 
 namespace Ui {
 class MainWindow;
@@ -34,8 +35,7 @@ private slots:
     void finishedSlot(QNetworkReply *reply);
     void replyErrprSlot();
 
-    QJsonObject getJsonObjectFromString(const QString jsonString);
-    QString getStringFromJsonObject(const QJsonObject& jsonObject);
+    QString getIdCardNumber(QString &data);
 
 private:
     Ui::MainWindow *ui;

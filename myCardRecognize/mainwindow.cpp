@@ -10,6 +10,8 @@ MainWindow::MainWindow(QWidget *parent) :
     nam = new QNetworkAccessManager(this);
        QObject::connect(nam, SIGNAL(finished(QNetworkReply*)),
                 this, SLOT(finishedSlot(QNetworkReply*)));
+
+
 }
 
 MainWindow::~MainWindow()
@@ -18,21 +20,35 @@ MainWindow::~MainWindow()
     delete nam;
 }
 
+QString MainWindow::getIdCardNumber(QString &str)
+{
+    QJsonParseError json_error;
+    QJsonDocument doc = QJsonDocument::fromJson(str.toUtf8(), &json_error);
+    if(json_error.error == QJsonParseError::NoError)
+    {
+        if(doc.isObject())
+        {
+            QJsonObject obj= doc.object();
+            if(obj.contains("plates"))
+            {
+                QJsonValue val= obj.take("plates");
+                if(val.isArray())
+                {
+                     QJsonArray arry= val.toArray();
+                     QJsonObject obj1=arry.at(0).toObject();
+                     if(obj1.contains("txt"))
+                     {
+                         QString idCard=obj1.take("txt").toString();
+                         return idCard;
+                     }
+                }
 
-// QString >> QJson
-QJsonObject MainWindow::getJsonObjectFromString(const QString jsonString){
-    QJsonDocument jsonDocument = QJsonDocument::fromJson(jsonString.toLocal8Bit().data());
-    if( jsonDocument.isNull() ){
-        qDebug()<< "===> please check the string "<< jsonString.toLocal8Bit().data();
+            }
+        }
     }
-    QJsonObject jsonObject = jsonDocument.object();
-    return jsonObject;
+    return NULL;
 }
 
-// QJson >> QString
-QString MainWindow::getStringFromJsonObject(const QJsonObject& jsonObject){
-    return QString(QJsonDocument(jsonObject).toJson());
-}
 
 void MainWindow::finishedSlot(QNetworkReply *reply)
 {
@@ -42,11 +58,46 @@ void MainWindow::finishedSlot(QNetworkReply *reply)
              QByteArray bytes = reply->readAll();
 
 
-             this->getJsonObjectFromString(QString(bytes));
+           //  /************************************
+             QJsonParseError json_error;
+             QJsonDocument parse_doucment = QJsonDocument::fromJson(bytes, &json_error);
+             if(json_error.error == QJsonParseError::NoError)
+             {
+                 if(parse_doucment.isObject())
+                 {
+                     QJsonObject obj = parse_doucment.object();
+                     if(obj.contains("outputs"))
+                     {
+                         QJsonValue name_value = obj.take("outputs");
+                         if(name_value.isArray())
+                         {
+                             QJsonArray myoutputs = name_value.toArray();
 
-             QString string = QString::fromUtf8(bytes);
+                             QJsonValue val=myoutputs.at(0);
+                             if(val.isObject())
+                             {
+                                 QJsonObject obj1= val.toObject();
+                                 if(obj1.contains("outputValue"))
+                                 {
+                                    QJsonObject obj2=obj1.take("outputValue").toObject();
+                                    if(obj2.contains("dataValue"))
+                                    {
+                                        QString mydatavalue=obj2.take("dataValue").toVariant().toString();
+                                        qDebug()<<mydatavalue;
+                                        QString IdCardnumber=getIdCardNumber(mydatavalue);
 
-             ui->edt_ResData ->setText(string.toUtf8());
+                                        ui->edt_ResData ->setText("your car number is:"+IdCardnumber);
+                                    }
+                                 }
+                             }
+
+                         }
+                     }
+                 }
+             }
+
+            // ***************************************/
+
          }
          else
          {
@@ -55,14 +106,18 @@ void MainWindow::finishedSlot(QNetworkReply *reply)
              //statusCodeV是HTTP服务器的相应码，reply->error()是Qt定义的错误码，可以参考QT的文档
              qDebug( "found error ....code: %d %d\n", statusCodeV.toInt(), (int)reply->error());
              qDebug(qPrintable(reply->errorString()));
+             ui->edt_ResData ->setText("sorry,don't recoginzed your card number!");
          }
          reply->deleteLater();
 }
+
+
 
 void MainWindow::replyErrprSlot()
 {
     qDebug()<<"is  error!";
 }
+
 
 void MainWindow::on_btn_PostReq_clicked()
 {
