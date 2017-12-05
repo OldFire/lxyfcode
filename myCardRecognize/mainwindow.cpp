@@ -201,7 +201,7 @@ void MainWindow::on_btn_PostReq_clicked()
        request->setUrl(myurl);
        request->setRawHeader("Content-Type","application/x-www-form-urlencoded; charset=utf-8");
        request->setRawHeader("Accept","application/json");
-       request->setRawHeader("Authorization","APPCODE a31ff1330a354694ae17ab6defe32a78");
+       request->setRawHeader("Authorization","APPCODE a13ff1330a354694ae17ab6defe32a78");
 
         QByteArray mybody="{ \
                        \"inputs\": [ \
