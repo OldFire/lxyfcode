@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/new/prefix1">
+        <file>add.bmp</file>
+        <file>select.bmp</file>
+        <file>blank.bmp</file>
+    </qresource>
+</RCC>
